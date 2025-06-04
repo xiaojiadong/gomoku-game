@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>五子棋在线游戏</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            padding: 5px 10px;
+        }
+        #game-container {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+            position: relative;
+            left: -100px; /* 向左偏移100px，可以根据需要调整这个值 */
+        }
+        .game-layout {
+            display: flex;
+            flex-direction: row;
+        }
+        .controls {
+            display: flex;
+            flex-direction: column;
+            margin-right: 40px;
+            min-width: 120px;
+        }
+        canvas {
+            background-color: #e1c391;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+        button {
+            margin: 10px 0;
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #status {
+            margin: 10px 0;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        /* 添加难度按钮样式 */
+        #difficulty {
+            margin: 10px 0;
+        }
+        #difficulty p {
+            margin: 5px 0;
+        }
+        .difficulty-btn {
+            width: 80px;
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        .difficulty-btn.active {
+            background-color: #e53935; /* 红色 */
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>五子棋在线游戏</h1>
+    <div id="game-container">
+        <div class="game-layout">
+            <div class="controls">
+                <button id="restart">重新开始</button>
+                <button id="undo">悔棋</button>
+                <div id="difficulty">
+                    <p>难度选择:</p>
+                    <button id="easy" class="difficulty-btn">简单</button>
+                    <button id="medium" class="difficulty-btn active">中等</button>
+                    <button id="hard" class="difficulty-btn">困难</button>
+                </div>
+                <div id="status">黑棋回合</div>
+            </div>
+            <canvas id="board" width="450" height="450"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // 游戏配置
+        const config = {
+            boardSize: 15,
+            cellSize: 30,
+            padding: 15,
+            difficulty: 'medium' // 默认中等难度
+        };
+
+        // 游戏状态
+        const gameState = {
+            board: Array(config.boardSize).fill().map(() => Array(config.boardSize).fill(0)),
+            currentPlayer: 1, // 1: 黑棋(玩家), 2: 白棋(AI)
+            gameOver: false,
+            history: [],
+            lastMove: null // 记录最后一次落子位置
+        };
+
+        // DOM元素
+        const canvas = document.getElementById('board');
+        const ctx = canvas.getContext('2d');
+        const statusEl = document.getElementById('status');
+        const restartBtn = document.getElementById('restart');
+        const undoBtn = document.getElementById('undo');
+        const easyBtn = document.getElementById('easy');
+        const mediumBtn = document.getElementById('medium');
+        const hardBtn = document.getElementById('hard');
+
+        // 初始化游戏
+        function initGame() {
+            drawBoard();
+            addEventListeners();
+        }
+
+        // 绘制棋盘
+        function drawBoard() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制网格线
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1;
+            
+            for (let i = 0; i < config.boardSize; i++) {
+                // 横线
+                ctx.beginPath();
+                ctx.moveTo(config.padding, config.padding + i * config.cellSize);
+                ctx.lineTo(config.padding + (config.boardSize - 1) * config.cellSize, config.padding + i * config.cellSize);
+                ctx.stroke();
+                
+                // 竖线
+                ctx.beginPath();
+                ctx.moveTo(config.padding + i * config.cellSize, config.padding);
+                ctx.lineTo(config.padding + i * config.cellSize, config.padding + (config.boardSize - 1) * config.cellSize);
+                ctx.stroke();
+            }
+            
+            // 绘制棋子
+            for (let i = 0; i < config.boardSize; i++) {
+                for (let j = 0; j < config.boardSize; j++) {
+                    if (gameState.board[i][j] !== 0) {
+                        drawPiece(i, j, gameState.board[i][j]);
+                    }
+                }
+            }
+            
+            // 绘制最后落子标记 - 只在白棋上显示
+            if (gameState.lastMove && gameState.board[gameState.lastMove.row][gameState.lastMove.col] === 2) {
+                const x = config.padding + gameState.lastMove.col * config.cellSize;
+                const y = config.padding + gameState.lastMove.row * config.cellSize;
+                
+                ctx.strokeStyle = '#e53935'; // 红色
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x - 8, y - 8, 16, 16); // 绘制小方框
+            }
+        }
+
+        // 绘制棋子
+        function drawPiece(row, col, player) {
+            const x = config.padding + col * config.cellSize;
+            const y = config.padding + row * config.cellSize;
+            
+            ctx.beginPath();
+            ctx.arc(x, y, config.cellSize / 2 - 2, 0, Math.PI * 2);
+            ctx.fillStyle = player === 1 ? '#000' : '#fff';
+            ctx.fill();
+            
+            if (player === 2) {
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+        }
+
+        // 添加事件监听
+        function addEventListeners() {
+            canvas.addEventListener('click', handleCanvasClick);
+            restartBtn.addEventListener('click', restartGame);
+            undoBtn.addEventListener('click', undoMove);
+            
+            // 添加难度选择事件
+            easyBtn.addEventListener('click', () => setDifficulty('easy'));
+            mediumBtn.addEventListener('click', () => setDifficulty('medium'));
+            hardBtn.addEventListener('click', () => setDifficulty('hard'));
+        }
+
+        // 处理画布点击
+        function handleCanvasClick(e) {
+            if (gameState.gameOver || gameState.currentPlayer !== 1) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const col = Math.round((x - config.padding) / config.cellSize);
+            const row = Math.round((y - config.padding) / config.cellSize);
+            
+            if (row >= 0 && row < config.boardSize && col >= 0 && col < config.boardSize) {
+                if (gameState.board[row][col] === 0) {
+                    makeMove(row, col);
+                }
+            }
+        }
+
+        // 落子
+        function makeMove(row, col) {
+            gameState.board[row][col] = gameState.currentPlayer;
+            gameState.history.push({row, col, player: gameState.currentPlayer});
+            gameState.lastMove = {row, col}; // 记录最后落子位置
+            
+            drawBoard();
+            
+            if (checkWin(row, col, gameState.currentPlayer)) {
+                gameState.gameOver = true;
+                statusEl.textContent = gameState.currentPlayer === 1 ? '黑棋获胜!' : '白棋获胜!';
+                return;
+            }
+            
+            gameState.currentPlayer = gameState.currentPlayer === 1 ? 2 : 1;
+            statusEl.textContent = gameState.currentPlayer === 1 ? '黑棋回合' : '白棋回合';
+            
+            if (gameState.currentPlayer === 2 && !gameState.gameOver) {
+                setTimeout(aiMove, 1500); // 调整AI落子延迟为1.5秒
+            }
+        }
+
+        // AI落子
+        function aiMove() {
+            let bestMove;
+            
+            switch(config.difficulty) {
+                case 'easy':
+                    bestMove = findEasyMove();
+                    break;
+                case 'medium':
+                    bestMove = findMediumMove();
+                    break;
+                case 'hard':
+                    bestMove = findBestMove(); // 原来的高难度AI
+                    break;
+                default:
+                    bestMove = findMediumMove();
+            }
+            
+            makeMove(bestMove.row, bestMove.col);
+        }
+
+        // 寻找最佳落子位置
+        function findBestMove() {
+            // 检查AI是否能直接获胜
+            for (let i = 0; i < config.boardSize; i++) {
+                for (let j = 0; j < config.boardSize; j++) {
+                    if (gameState.board[i][j] === 0) {
+                        gameState.board[i][j] = 2;
+                        if (checkWin(i, j, 2)) {
+                            gameState.board[i][j] = 0;
+                            return {row: i, col: j};
+                        }
+                        gameState.board[i][j] = 0;
+                    }
+                }
+            }
+            
+            // 检查是否需要阻止玩家获胜
+            for (let i = 0; i < config.boardSize; i++) {
+                for (let j = 0; j < config.boardSize; j++) {
+                    if (gameState.board[i][j] === 0) {
+                        gameState.board[i][j] = 1;
+                        if (checkWin(i, j, 1)) {
+                            gameState.board[i][j] = 0;
+                            return {row: i, col: j};
+                        }
+                        gameState.board[i][j] = 0;
+                    }
+                }
+            }
+            
+            // 评估每个位置的分数
+            let bestScore = -Infinity;
+            let bestMove = null;
+            
+            for (let i = 0; i < config.boardSize; i++) {
+                for (let j = 0; j < config.boardSize; j++) {
+                    if (gameState.board[i][j] === 0) {
+                        // 只考虑周围有棋子的空位
+                        if (hasNeighbor(i, j)) {
+                            const score = evaluatePosition(i, j);
+                            if (score > bestScore) {
+                                bestScore = score;
+                                bestMove = {row: i, col: j};
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // 如果找到了最佳位置，返回它
+            if (bestMove) {
+                return bestMove;
+            }
+            
+            // 如果没有找到最佳位置（例如开局），选择靠近中心的位置
+            const center = Math.floor(config.boardSize / 2);
+            if (gameState.board[center][center] === 0) {
+                return {row: center, col: center};
+            }
+            
+            // 随机选择一个有邻居的位置
+            let availableMoves = [];
+            for (let i = 0; i < config.boardSize; i++) {
+                for (let j = 0; j < config.boardSize; j++) {
+                    if (gameState.board[i][j] === 0 && hasNeighbor(i, j)) {
+                        availableMoves.push({row: i, col: j});
+                    }
+                }
+            }
+            
+            if (availableMoves.length > 0) {
+                return availableMoves[Math.floor(Math.random() * availableMoves.length)];
+            }
+            
+            // 最后的后备选项：选择任何空位
+            for (let i = 0; i < config.boardSize; i++) {
+                for (let j = 0; j < config.boardSize; j++) {
+                    if (gameState.board[i][j] === 0) {
+                        return {row: i, col: j};
+                    }
+                }
+            }
+            
+            return null;
+        }
+
+        // 检查位置周围是否有棋子
+        function hasNeighbor(row, col) {
+            const directions = [
+                [-1, -1], [-1, 0], [-1, 1],
+                [0, -1],           [0, 1],
+                [1, -1],  [1, 0],  [1, 1]
+            ];
+            
+            for (const [dr, dc] of directions) {
+                const newRow = row + dr;
+                const newCol = col + dc;
+                
+                if (newRow >= 0 && newRow < config.boardSize && 
+                    newCol >= 0 && newCol < config.boardSize && 
+                    gameState.board[newRow][newCol] !== 0) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
+        // 评估位置的分数
+        function evaluatePosition(row, col) {
+            let aiScore = getPositionScore(row, col, 2); // AI的分数
+            let playerScore = getPositionScore(row, col, 1); // 玩家的分数
+            
+            // 进攻比防守更重要，但不要忽视防守
+            return aiScore * 1.1 + playerScore;
+        }
+
+        // 获取在特定位置落子对特定玩家的分数
+        function getPositionScore(row, col, player) {
+            const directions = [
+                [{r: 0, c: 1}, {r: 0, c: -1}],  // 水平
+                [{r: 1, c: 0}, {r: -1, c: 0}],  // 垂直
+                [{r: 1, c: 1}, {r: -1, c: -1}], // 对角线
+                [{r: 1, c: -1}, {r: -1, c: 1}]  // 反对角线
+            ];
+            
+            let totalScore = 0;
+            
+            // 临时在此位置落子
+            gameState.board[row][col] = player;
+            
+            for (const direction of directions) {
+                // 计算这个方向上的连续棋子
+                let count = 1; // 当前位置已经有一个棋子
+                let blocked = 0; // 被对方棋子挡住的端点数
+                
+                // 检查两个方向
+                for (const {r, c} of direction) {
+                    let consecutive = 0;
+                    let i = 1;
+                    
+                    // 计算连续的同色棋子
+                    while (
+                        row + r * i >= 0 && 
+                        row + r * i < config.boardSize && 
+                        col + c * i >= 0 && 
+                        col + c * i < config.boardSize
+                    ) {
+                        if (gameState.board[row + r * i][col + c * i] === player) {
+                            consecutive++;
+                            i++;
+                        } else {
+                            if (gameState.board[row + r * i][col + c * i] !== 0) {
+                                blocked++;
+                            }
+                            break;
+                        }
+                    }
+                    
+                    count += consecutive;
+                }
+                
+                // 根据连续棋子数和被阻挡情况评分
+                totalScore += scorePattern(count, blocked);
+            }
+            
+            // 恢复棋盘
+            gameState.board[row][col] = 0;
+            
+            return totalScore;
+        }
+
+        // 根据模式评分
+        function scorePattern(count, blocked) {
+            // 如果两端都被阻挡，价值降低
+            const openEnds = 2 - blocked;
+            
+            // 基础分数
+            if (count >= 5) return 100000; // 五连珠，必胜
+            
+            if (count === 4) {
+                if (openEnds >= 1) return 10000; // 活四或冲四
+                return 1000; // 死四
+            }
+            
+            if (count === 3) {
+                if (openEnds === 2) return 1000; // 活三
+                if (openEnds === 1) return 100; // 冲三
+                return 10; // 死三
+            }
+            
+            if (count === 2) {
+                if (openEnds === 2) return 100; // 活二
+                if (openEnds === 1) return 10; // 冲二
+                return 1; // 死二
+            }
+            
+            if (count === 1) {
+                if (openEnds === 2) return 10; // 活一
+                return 1; // 冲一或死一
+            }
+            
+            return 0;
+        }
+
+        // 检查是否获胜
+        function checkWin(row, col, player) {
+            const directions = [
+                [{r: 0, c: 1}, {r: 0, c: -1}],  // 水平
+                [{r: 1, c: 0}, {r: -1, c: 0}],  // 垂直
+                [{r: 1, c: 1}, {r: -1, c: -1}], // 对角线
+                [{r: 1, c: -1}, {r: -1, c: 1}]  // 反对角线
+            ];
+            
+            for (const direction of directions) {
+                let count = 1;
+                
+                for (const {r, c} of direction) {
+                    let i = 1;
+                    while (
+                        row + r * i >= 0 && 
+                        row + r * i < config.boardSize && 
+                        col + c * i >= 0 && 
+                        col + c * i < config.boardSize && 
+                        gameState.board[row + r * i][col + c * i] === player
+                    ) {
+                        count++;
+                        i++;
+                    }
+                }
+                
+                if (count >= 5) return true;
+            }
+            
+            return false;
+        }
+
+        // 重新开始游戏
+        function restartGame() {
+            gameState.board = Array(config.boardSize).fill().map(() => Array(config.boardSize).fill(0));
+            gameState.currentPlayer = 1;
+            gameState.gameOver = false;
+            gameState.history = [];
+            gameState.lastMove = null; // 重置最后落子位置
+            
+            statusEl.textContent = '黑棋回合';
+            drawBoard();
+        }
+
+        // 悔棋
+        function undoMove() {
+            if (gameState.history.length === 0 || gameState.gameOver) return;
+            
+            // 如果是AI回合，需要撤销两步（玩家和AI的各一步）
+            const steps = gameState.currentPlayer === 1 ? 2 : 1;
+            
+            for (let i = 0; i < steps && gameState.history.length > 0; i++) {
+                const lastMove = gameState.history.pop();
+                gameState.board[lastMove.row][lastMove.col] = 0;
+            }
+            
+            gameState.currentPlayer = 1;
+            gameState.gameOver = false;
+            statusEl.textContent = '黑棋回合';
+            
+            // 更新最后落子位置
+            gameState.lastMove = gameState.history.length > 0 ? 
+                {row: gameState.history[gameState.history.length-1].row, col: gameState.history[gameState.history.length-1].col} : 
+                null;
+            
+            drawBoard();
+        }
+
+        // 设置难度函数
+        function setDifficulty(level) {
+            config.difficulty = level;
+            
+            // 更新按钮样式
+            easyBtn.classList.remove('active');
+            mediumBtn.classList.remove('active');
+            hardBtn.classList.remove('active');
+            
+            if (level === 'easy') easyBtn.classList.add('active');
+            else if (level === 'medium') mediumBtn.classList.add('active');
+            else hardBtn.classList.add('active');
+        }
+
+        // 简单难度AI - 随机落子，但会阻止玩家直接获胜
+        function findEasyMove() {
+            // 检查是否需要阻止玩家获胜
+            for (let i = 0; i < config.boardSize; i++) {
+                for (let j = 0; j < config.boardSize; j++) {
+                    if (gameState.board[i][j] === 0) {
+                        gameState.board[i][j] = 1;
+                        if (checkWin(i, j, 1)) {
+                            gameState.board[i][j] = 0;
+                            return {row: i, col: j};
+                        }
+                        gameState.board[i][j] = 0;
+                    }
+                }
+            }
+            
+            // 随机选择一个空位
+            let availableMoves = [];
+            for (let i = 0; i < config.boardSize; i++) {
+                for (let j = 0; j < config.boardSize; j++) {
+                    if (gameState.board[i][j] === 0) {
+                        availableMoves.push({row: i, col: j});
+                    }
+                }
+            }
+            
+            if (availableMoves.length > 0) {
+                return availableMoves[Math.floor(Math.random() * availableMoves.length)];
+            }
+            
+            return {row: 7, col: 7}; // 默认中心位置
+        }
+
+        // 中等难度AI - 会寻找能赢的位置，阻止玩家获胜，但评估不够深入
+        function findMediumMove() {
+            // 检查AI是否能直接获胜
+            for (let i = 0; i < config.boardSize; i++) {
+                for (let j = 0; j < config.boardSize; j++) {
+                    if (gameState.board[i][j] === 0) {
+                        gameState.board[i][j] = 2;
+                        if (checkWin(i, j, 2)) {
+                            gameState.board[i][j] = 0;
+                            return {row: i, col: j};
+                        }
+                        gameState.board[i][j] = 0;
+                    }
+                }
+            }
+            
+            // 检查是否需要阻止玩家获胜
+            for (let i = 0; i < config.boardSize; i++) {
+                for (let j = 0; j < config.boardSize; j++) {
+                    if (gameState.board[i][j] === 0) {
+                        gameState.board[i][j] = 1;
+                        if (checkWin(i, j, 1)) {
+                            gameState.board[i][j] = 0;
+                            return {row: i, col: j};
+                        }
+                        gameState.board[i][j] = 0;
+                    }
+                }
+            }
+            
+            // 简单评估 - 优先选择靠近已有棋子的位置
+            let availableMoves = [];
+            for (let i = 0; i < config.boardSize; i++) {
+                for (let j = 0; j < config.boardSize; j++) {
+                    if (gameState.board[i][j] === 0 && hasNeighbor(i, j)) {
+                        availableMoves.push({row: i, col: j});
+                    }
+                }
+            }
+            
+            if (availableMoves.length > 0) {
+                return availableMoves[Math.floor(Math.random() * availableMoves.length)];
+            }
+            
+            // 如果没有找到合适的位置，选择中心位置
+            const center = Math.floor(config.boardSize / 2);
+            if (gameState.board[center][center] === 0) {
+                return {row: center, col: center};
+            }
+            
+            // 最后选择任何空位
+            for (let i = 0; i < config.boardSize; i++) {
+                for (let j = 0; j < config.boardSize; j++) {
+                    if (gameState.board[i][j] === 0) {
+                        return {row: i, col: j};
+                    }
+                }
+            }
+            
+            return null;
+        }
+
+        // 初始化游戏
+        initGame();
+    </script>
+</body>
+</html>
